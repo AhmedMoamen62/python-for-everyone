@@ -1,101 +1,179 @@
-import xml.etree.ElementTree as ET
+import json
 import sqlite3
 
-## if not found, it will create it
-conn = sqlite3.connect('trackdb.sqlite')
+conn = sqlite3.connect('rosterdb.sqlite')
 cur = conn.cursor()
 
+## unique TEXT , say if we have two similar name or title any text it gonna fail
+# Do some setup
 cur.executescript('''
-DROP TABLE IF EXISTS Artist;
-DROP TABLE IF EXISTS Genre;
-DROP TABLE IF EXISTS Album;
-DROP TABLE IF EXISTS Track;
+DROP TABLE IF EXISTS User;
+DROP TABLE IF EXISTS Member;
+DROP TABLE IF EXISTS Course;
 
-CREATE TABLE Artist (
-    id  INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE,
-    name    TEXT UNIQUE
+CREATE TABLE User (
+    id     INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE,
+    name   TEXT UNIQUE
 );
 
-CREATE TABLE Genre (
-    id  INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE,
-    name    TEXT UNIQUE
+CREATE TABLE Course (
+    id     INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE,
+    title  TEXT UNIQUE
 );
 
-CREATE TABLE Album (
-    id  INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE,
-    artist_id  INTEGER,
-    title   TEXT UNIQUE
-);
-
-CREATE TABLE Track (
-    id  INTEGER NOT NULL PRIMARY KEY 
-        AUTOINCREMENT UNIQUE,
-    title TEXT  UNIQUE,
-    album_id  INTEGER,
-    genre_id  INTEGER,
-    len INTEGER, rating INTEGER, count INTEGER
-);
-
+CREATE TABLE Member (
+    user_id     INTEGER,
+    course_id   INTEGER,
+    role        INTEGER,
+    PRIMARY KEY (user_id, course_id)
+)
 ''')
 
-fname = 'Library.xml'
+fname = 'roster_data.json'
 
-def lookup(d,key):
-	found = False
-	for child in d:
-		if found: return child.text
-		if child.tag == 'key' and child.text == key:
-			found = True
-	return None
+# fname = input('Enter file name: ')
+# if len(fname) < 1:
+#     fname = 'roster_data_sample.json'
 
-stuff = ET.parse(fname)
-all = stuff.findall('dict/dict/dict')
-print('Dict count',len(all))
-for entry in all:
-	if (lookup(entry,'Track ID') is None) : continue
+# [
+#   [ "Charley", "si110", 1 ],
+#   [ "Mea", "si110", 0 ],
 
-	name = lookup(entry,'Name')
-	artist = lookup(entry,'Artist')
-	album = lookup(entry,'Album')
-	genre = lookup(entry,'Genre')
-	count = lookup(entry,'Play Count')
-	rating = lookup(entry,'Rating')
-	length = lookup(entry,'Total Time')
+str_data = open(fname).read()
+json_data = json.loads(str_data)
 
-	if name is None or artist is None or album is None or genre is None:
-		continue
+for entry in json_data:
 
-	print(name,genre,artist,count,rating,length)
+    name = entry[0];
+    title = entry[1];
+    role = entry[2]
 
+    print((name, title,role))
 
-	## ignore , if it is exist , don't insert again
-	cur.execute('''INSERT OR IGNORE INTO Artist (name)
-				VALUES ( ? )''',(artist,))
-	cur.execute('SELECT id FROM Artist WHERE name = ?',(artist,))
-	artist_id = cur.fetchone()[0]
+    ## ignore to skip if an error happens, like twice name or title and it's a unique
+    cur.execute('''INSERT OR IGNORE INTO User (name)
+        VALUES ( ? )''', ( name, ) )
+    ## get the unique id of the name
+    cur.execute('SELECT id FROM User WHERE name = ? ', (name, ))
+    user_id = cur.fetchone()[0]
 
-	cur.execute('''INSERT OR IGNORE INTO Genre (name)
-				VALUES ( ? )''',(genre,))
-	cur.execute('SELECT id FROM Genre WHERE name = ?',(genre,))
-	genre_id = cur.fetchone()[0]
+    cur.execute('''INSERT OR IGNORE INTO Course (title)
+        VALUES ( ? )''', ( title, ) )
+    cur.execute('SELECT id FROM Course WHERE title = ? ', (title, ))
+    course_id = cur.fetchone()[0]
 
-	cur.execute('''INSERT OR IGNORE INTO Album (title,artist_id)
-				VALUES ( ?, ? )''',(album,artist_id))
-	cur.execute('SELECT id FROM Album WHERE title = ?',(album,))
-	album_id = cur.fetchone()[0]
-
-	cur.execute('''INSERT OR REPLACE INTO Track (title,genre_id,album_id,len,rating,count)
-				VALUES ( ?, ?, ?, ?, ?, ? )''',(name,genre_id,album_id,length,rating,count))
-
+    cur.execute('''INSERT OR REPLACE INTO Member
+        (user_id, course_id, role) VALUES ( ?, ?, ? )''',
+        ( user_id, course_id, role) )
 
 cur.execute('''
-SELECT Track.title, Artist.name, Album.title, Genre.name 
-    FROM Track JOIN Genre JOIN Album JOIN Artist 
-    ON Track.genre_id = Genre.ID and Track.album_id = Album.id 
-        AND Album.artist_id = Artist.id
-    ORDER BY Artist.name LIMIT 3
+	SELECT hex(User.name || Course.title || Member.role ) AS X FROM 
+    User JOIN Member JOIN Course 
+    ON User.id = Member.user_id AND Member.course_id = Course.id
+    ORDER BY X
 ''')
 conn.commit()
+
+
+
+# import xml.etree.ElementTree as ET
+# import sqlite3
+
+# ## if not found, it will create it
+# conn = sqlite3.connect('trackdb.sqlite')
+# cur = conn.cursor()
+
+# cur.executescript('''
+# DROP TABLE IF EXISTS Artist;
+# DROP TABLE IF EXISTS Genre;
+# DROP TABLE IF EXISTS Album;
+# DROP TABLE IF EXISTS Track;
+
+# CREATE TABLE Artist (
+#     id  INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE,
+#     name    TEXT UNIQUE
+# );
+
+# CREATE TABLE Genre (
+#     id  INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE,
+#     name    TEXT UNIQUE
+# );
+
+# CREATE TABLE Album (
+#     id  INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE,
+#     artist_id  INTEGER,
+#     title   TEXT UNIQUE
+# );
+
+# CREATE TABLE Track (
+#     id  INTEGER NOT NULL PRIMARY KEY 
+#         AUTOINCREMENT UNIQUE,
+#     title TEXT  UNIQUE,
+#     album_id  INTEGER,
+#     genre_id  INTEGER,
+#     len INTEGER, rating INTEGER, count INTEGER
+# );
+
+# ''')
+
+# fname = 'Library.xml'
+
+# def lookup(d,key):
+# 	found = False
+# 	for child in d:
+# 		if found: return child.text
+# 		if child.tag == 'key' and child.text == key:
+# 			found = True
+# 	return None
+
+# stuff = ET.parse(fname)
+# all = stuff.findall('dict/dict/dict')
+# print('Dict count',len(all))
+# for entry in all:
+# 	if (lookup(entry,'Track ID') is None) : continue
+
+# 	name = lookup(entry,'Name')
+# 	artist = lookup(entry,'Artist')
+# 	album = lookup(entry,'Album')
+# 	genre = lookup(entry,'Genre')
+# 	count = lookup(entry,'Play Count')
+# 	rating = lookup(entry,'Rating')
+# 	length = lookup(entry,'Total Time')
+
+# 	if name is None or artist is None or album is None or genre is None:
+# 		continue
+
+# 	print(name,genre,artist,count,rating,length)
+
+
+# 	## ignore , if it is exist , don't insert again
+# 	cur.execute('''INSERT OR IGNORE INTO Artist (name)
+# 				VALUES ( ? )''',(artist,))
+# 	cur.execute('SELECT id FROM Artist WHERE name = ?',(artist,))
+# 	artist_id = cur.fetchone()[0]
+
+# 	cur.execute('''INSERT OR IGNORE INTO Genre (name)
+# 				VALUES ( ? )''',(genre,))
+# 	cur.execute('SELECT id FROM Genre WHERE name = ?',(genre,))
+# 	genre_id = cur.fetchone()[0]
+
+# 	cur.execute('''INSERT OR IGNORE INTO Album (title,artist_id)
+# 				VALUES ( ?, ? )''',(album,artist_id))
+# 	cur.execute('SELECT id FROM Album WHERE title = ?',(album,))
+# 	album_id = cur.fetchone()[0]
+
+# 	cur.execute('''INSERT OR REPLACE INTO Track (title,genre_id,album_id,len,rating,count)
+# 				VALUES ( ?, ?, ?, ?, ?, ? )''',(name,genre_id,album_id,length,rating,count))
+
+
+# cur.execute('''
+# SELECT Track.title, Artist.name, Album.title, Genre.name 
+#     FROM Track JOIN Genre JOIN Album JOIN Artist 
+#     ON Track.genre_id = Genre.ID and Track.album_id = Album.id 
+#         AND Album.artist_id = Artist.id
+#     ORDER BY Artist.name LIMIT 3
+# ''')
+# conn.commit()
 
 # import sqlite3
 
